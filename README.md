@@ -3,7 +3,7 @@
 This repository contains a fully automated PowerShell script that
 installs, configures, and prepares a complete **Windows Deployment
 Services (WDS)** and **Microsoft Deployment Toolkit (MDT)** environment
-on Windows Server.\
+on Windows Server.
 It supports both **unattended** and **interactive** execution modes.
 
 ---
@@ -12,31 +12,31 @@ It supports both **unattended** and **interactive** execution modes.
 
 ### **WDS Configuration**
 
--   Creates a dedicated WDS service account\
--   Initializes WDS in standalone mode\
--   Configures PXE prompt behavior\
--   Sets DHCP/WDS port behavior\
+-   Creates a dedicated WDS service account
+-   Initializes WDS in standalone mode
+-   Configures PXE prompt behavior
+-   Sets DHCP/WDS port behavior
 -   Creates and prepares the `RemoteInstall` structure
 
 ### **Windows ADK + WinPE**
 
--   Installs Windows ADK (Deployment Tools + USMT)\
--   Installs WinPE Add-on\
+-   Installs Windows ADK (Deployment Tools + USMT)
+-   Installs WinPE Add-on
 -   Copies required x86 WinPE platform files (Attention! You need to unzip the directory)
 
 ### **MDT Installation & Patch Integration**
 
--   Installs MDT silently\
--   Extracts and applies MDT KB4564442 patch\
+-   Installs MDT silently
+-   Extracts and applies MDT KB4564442 patch
 -   Replaces x86/x64 patched files automatically
 
 ### **MDT Deployment Share Setup**
 
--   Creates DeploymentShare folder\
--   Creates admin SMB share\
--   Creates Reports, BLKeys, and Logs directories\
--   Assigns NTFS + SMB permissions\
--   Creates a global MDTProvider PSDrive\
+-   Creates DeploymentShare folder
+-   Creates admin SMB share
+-   Creates Reports, BLKeys, and Logs directories
+-   Assigns NTFS + SMB permissions
+-   Creates a global MDTProvider PSDrive
 -   Enables MDT Monitoring Service
 
 ### **Configuration Files**
@@ -46,8 +46,8 @@ Automatically generates: - `CustomSettings.ini` (fully populated) -
 
 ### **Boot Image Generation**
 
--   Updates the DeploymentShare\
--   Generates LiteTouchPE_x64.wim\
+-   Updates the DeploymentShare
+-   Generates LiteTouchPE_x64.wim
 -   Imports boot image into WDS
 
 ---
@@ -127,8 +127,8 @@ A detailed installation log is generated automatically:
 
 ## ⚠️ Notes
 
--   Script must be run as **Administrator**\
--   Server must be rebooted before running WDS for the first time\
+-   Script must be run as **Administrator**
+-   Server must be rebooted before running WDS for the first time
 -   Ensure ADK + WinPE + MDT files exist in the paths configured
 
 ---
