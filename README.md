@@ -69,6 +69,9 @@ Run with defaults defined in the script:
 ``` powershell
 .\custom_Configure_WDS.ps1
 ```
+<img width="880" height="420" alt="image" src="https://github.com/user-attachments/assets/a4e32562-a34c-41fb-a92c-5f05e9d9c1a7" />
+<img width="1596" height="866" alt="image" src="https://github.com/user-attachments/assets/147b02f7-8b71-4b56-9fdf-dbf19b7e0245" />
+<img width="1596" height="866" alt="image" src="https://github.com/user-attachments/assets/78ab2634-d572-4490-8041-0ed0422e62ed" />
 
 ### **Interactive Mode**
 
