@@ -43,7 +43,7 @@
 $feature = "WDS"
 
 # Log file path and function to log messages
-$SrvIP = "192.168.121.66" # MDT Server IP-Address
+$SrvIP = "0.0.0.0" # MDT Server IP-Address
 $CompName = $env:COMPUTERNAME
 $DateTime = Get-Date -Format "yyyy-MM-dd_HH-mm-ss"
 $logFileName = "Install_$($feature)_$($CompName)_$($DateTime).log"
@@ -116,4 +116,5 @@ try{
 catch{
 	Write-Warning "ERROR: Logfile '$localLogFile' could not be deleted.
 	Reason: $_"
+
 }
