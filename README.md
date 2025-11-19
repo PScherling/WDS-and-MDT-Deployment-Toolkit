@@ -22,7 +22,7 @@ It supports both **unattended** and **interactive** execution modes.
 
 -   Installs Windows ADK (Deployment Tools + USMT)\
 -   Installs WinPE Add-on\
--   Copies required x86 WinPE platform files
+-   Copies required x86 WinPE platform files (Attention! You need to unzip the directory)
 
 ### **MDT Installation & Patch Integration**
 
