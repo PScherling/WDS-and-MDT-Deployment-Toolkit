@@ -929,7 +929,7 @@ function Update-WDSBootImage {
 
 	try{
 		Invoke-Safe {
-			Import-WdsBootImage -Path "$($Config.BootImagePath)\$($Config.ImageFile)" -NewImageName "$($Config.ImageName)" -NewFileName "$($Config.ImageFile)" -NewDescription "$($Config.ImageDesc)" -SkipVerify
+			Import-WdsBootImage -Path "$($Config.BootImagePath)\$($Config.ImageFile)" -NewImageName "$($Config.ImageName)" -NewFileName "$($Config.ImageFile)" -NewDescription "$($Config.ImageDesc)" -SkipVerify | Out-Null
 		} "Update DeploymentShare"
 	}
 	catch{
@@ -1049,3 +1049,4 @@ Update-DeploymentShare
 Update-WDSBootImage
 
 Write-Log "===== CONFIGURATION COMPLETED ====="
+
