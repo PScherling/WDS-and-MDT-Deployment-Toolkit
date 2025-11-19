@@ -54,6 +54,14 @@ Automatically generates: - `CustomSettings.ini` (fully populated) -
 
 ## 📦 Script Modes
 
+### **WDS Role**
+
+Install the WDS Role and Features first:
+
+``` powershell
+.\custom_Install_WDS.ps1
+```
+
 ### **Unattended Mode**
 
 Run with defaults defined in the script:
