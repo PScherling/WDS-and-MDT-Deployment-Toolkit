@@ -83,10 +83,18 @@ and more:
 
 Folder structure example:
 
-    C:\_it\WDS Files ├── ADK │    ├── win11_24h2_adksetup_dez24.exe
-     │    ├── win11_24h2_adkwinpesetup_dez24.exe
-     │    └── Windows PE Environment └── MDT      ├── MicrosoftDeploymentToolkit_x64.msi
-          └── MDT_KB4564442.exe
+    C:\_it\WDS Files 
+        ├── ADK     
+            └── win11_24h2_adksetup_dez24.exe
+            └── win11_24h2_adkwinpesetup_dez24.exe
+            ├── Windows PE Environment
+                ├── x86 ...
+        ├── MDT   
+            └── MicrosoftDeploymentToolkit_x64.msi
+            └── MicrosoftDeploymentToolkit_x86.msi
+            └── MDT_KB4564442.exe
+            ├── Bin 
+                └── DeploymentTools.xml
 
 ---
 
