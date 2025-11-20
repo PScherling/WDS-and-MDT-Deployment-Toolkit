@@ -1,0 +1,23 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Kits>
+  <ADK>
+    <tool name="bcdboot.exe">%ADKPath%\Deployment Tools\%RealPlatform%\BCDBoot</tool>
+    <tool name="bcdedit.exe">%ADKPath%\Deployment Tools\%RealPlatform%\BCDBoot</tool>
+    <tool name="bootsect.exe">%ADKPath%\Deployment Tools\%RealPlatform%\BCDBoot</tool>
+    <tool name="dism.exe">%ADKPath%\Deployment Tools\%RealPlatform%\DISM</tool>
+    <tool name="imagex.exe">%ADKPath%\Deployment Tools\%RealPlatform%\DISM</tool>
+    <tool name="wimgapi.dll">%ADKPath%\Deployment Tools\%RealPlatform%\DISM</tool>
+    <tool name="wimgapi.dll.mui">%ADKPath%\Deployment Tools\%RealPlatform%\DISM\en-us</tool>
+    <tool name="oscdimg.exe">%ADKPath%\Deployment Tools\%RealPlatform%\OSCDIMG</tool>
+    <tool name="wdsmcast.exe">%ADKPath%\Deployment Tools\%RealPlatform%\WDSMCast</tool>
+    <tool name="wdsmcast.exe.mui">%ADKPath%\Deployment Tools\%RealPlatform%\WDSMCast\en-us</tool>
+    <tool name="winpe.wim">%ADKPath%\Windows Preinstallation Environment\%RealPlatform%\en-us</tool>
+    <tool name="imgmgr.exe">%ADKPath%\Deployment Tools\WSIM\%RealPlatform%</tool>
+    <tool name="scanstate.exe">%ADKPath%\User State Migration Tool\%RealPlatform%</tool>
+    <tool name="loadstate.exe">%ADKPath%\User State Migration Tool\%RealPlatform%</tool>
+    <tool name="bootmgr">%ADKPath%\Windows Preinstallation Environment\%RealPlatform%\Media</tool>
+    <tool name="etfsboot.com">%ADKPath%\Deployment Tools\%RealPlatform%\OSCDIMG</tool>
+    <tool name="efisys.bin">%ADKPath%\Deployment Tools\%RealPlatform%\OSCDIMG</tool>
+    <tool name="efisys_noprompt.bin">%ADKPath%\Deployment Tools\%RealPlatform%\OSCDIMG</tool>
+  </ADK>
+</Kits>
