@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Fully automated setup of a complete Windows Deployment Services (WDS) and
     Microsoft Deployment Toolkit (MDT) environment, including Windows ADK, WinPE,
@@ -70,12 +70,15 @@
           Contact: @Patrick Scherling
           Primary: @Patrick Scherling
           Created: 2025-11-17
-          Modified: 2025-11-19
+          Modified: 2025-11-20
 
           Version - 0.0.1 - () - Finalized functional version 1.
+		  Version - 0.0.2 - () - Check if install files need to be downloaded
+		  Version - 0.0.3 - () - Adding Progress Information
           
 
           TODO:
+		  - Copy OEM Background to MDT installdir
 
 .PARAMETER Interactive
     Enables prompts for confirmations.
@@ -93,13 +96,29 @@ param(
     [switch]$Interactive
 )
 
+# If we are not using PowerShell 5.x
+<#
+if ($PSVersionTable.PSVersion.Major -ge 6) {
+    Write-Host "ERROR: This script requires Windows PowerShell 5.1" -ForegroundColor Red
+    Write-Host "Please run it using: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe (e.g. 'powershell.exe -File .\custom_Configure_WDS.ps1')" -ForegroundColor Yellow
+    exit 1
+}
+#>
+if ($PSVersionTable.PSVersion.Major -ge 6) {
+	Write-Host "This script requires Windows PowerShell 5.1" -ForegroundColor Red
+    Write-Host "Restarting script in Windows PowerShell 5.1" -ForegroundColor Cyan
+    $ps51 = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+    Start-Process $ps51 -ArgumentList "-ExecutionPolicy Bypass -Windowstyle maximized -File `"$PSCommandPath`""
+    exit
+}
+
 # =====================================================================
 # GLOBAL CONFIG OBJECT
 # =====================================================================
 
 $Config = [PSCustomObject]@{
     Feature         = "WDS"
-	Version         = "0.0.1"
+	Version         = "0.0.3"
     CompName        = $env:COMPUTERNAME
 
 	WDSUser         = "wds.usr"
@@ -112,9 +131,11 @@ $Config = [PSCustomObject]@{
 	UseDhcpPorts    = "No" # Yes; No
 	#DhcpOption60    = "No" # Yes; No
 
+	SrcDirs         = @("C:\_it", "C:\_it\WDS Files", "C:\_it\WDS Files\ADK", "C:\_it\WDS Files\MDT")
+	LogDir          = "C:\_it"
     SourceRoot      = "C:\_it\WDS Files"
-    ADKSetup        = "C:\_it\WDS Files\ADK\win11_24h2_adksetup_dez24.exe"
-    WinPESetup      = "C:\_it\WDS Files\ADK\win11_24h2_adkwinpesetup_dez24.exe"
+    ADKSetup        = "C:\_it\WDS Files\ADK\adksetup.exe"
+    WinPESetup      = "C:\_it\WDS Files\ADK\adkwinpesetup.exe"
 	ADKInstPath     = "D:\WindowsKits\ADK"
 
     ADKx86Src       = "C:\_it\WDS Files\ADK\Windows PE Environment\x86"
@@ -138,7 +159,7 @@ $Config = [PSCustomObject]@{
 	ImageName       = "Lite Touch Windows PE (x64)"
 	ImageDesc       = "Lite Touch Windows PE (x64)"
 
-	UseWSUS         = "n"
+	UseWSUS         = "No" # No; Yes
 	WSUSServer      = ""
 
 	SMSTSOrgName    = "Company"
@@ -148,7 +169,51 @@ $Config = [PSCustomObject]@{
 	MDTMonitorEvent = 9800
 	MDTMonitorData  = 9801
 
-    LogDir          = "C:\_it"
+	# Download URLs
+	MdtURL = "https://download.microsoft.com/download/3/3/9/339BE62D-B4B8-4956-B58D-73C4685FC492/MicrosoftDeploymentToolkit_x64.msi"
+	AdkURL = "https://go.microsoft.com/fwlink/?linkid=2289980" # ADK 10.1.26100.2454 (December 2024)
+	AdkPeURL = "https://go.microsoft.com/fwlink/?linkid=2289981" # ADK 10.1.26100.2454 (December 2024)
+	MdtPatchURL = "https://download.microsoft.com/download/3/0/6/306AC1B2-59BE-43B8-8C65-E141EF287A5E/KB4564442/MDT_KB4564442.exe"
+
+	Error = 0
+}
+
+function Confirm-RootDir {
+	foreach($dir in $($Config.SrcDirs)){
+		If (-not (Test-Path "$($dir)")) { 
+			Write-Host "INFO: Creating Directory '$($dir)'."
+			try{
+				New-Item -Path "$($dir)" -ItemType Directory | Out-Null
+			}
+			catch{
+				Write-Host -ForegroundColor Red "ERROR: Directory '$($dir)' could not be created. $_"
+			}
+		}
+	}
+}
+
+# Downloading File
+function Start-DownloadInstallerFile {
+    param (
+        [string]$Url,
+        [string]$DestinationPath
+    )
+    try {
+        Start-BitsTransfer -Source $Url -Destination $DestinationPath -ErrorAction Stop
+        Write-Log "Download completed using BITS: $DestinationPath"
+    } catch {
+        Write-Log "BITS download failed: $_" "WARN"
+
+        # Fallback: Use Invoke-WebRequest
+        try {
+            Write-Host "URL: $Url"
+            Invoke-WebRequest -Uri $Url -OutFile $DestinationPath
+            Write-Log "Fallback download completed: $DestinationPath"
+        } catch {
+            Write-Log "Fallback download failed: $_" "ERROR"
+            #continue
+        }
+    }
 }
 
 function Initialize-InteractiveConfig {
@@ -192,10 +257,10 @@ function Initialize-InteractiveConfig {
     }
 
 	# Optional: WSUS
-	$UseWSUS = Read-Host "Do you want to use a WSUS server (default: no)? (y/n)"
+	$UseWSUS = Read-Host "Do you want to use a WSUS server (default: No)? (y/n)"
 	if ($UseWSUS -eq "y")
 	{
-		$Config.UseWSUS = "y"
+		$Config.UseWSUS = "Yes"
 		$Config.WSUSServer = Read-Host "Enter the name of the WSUS server to use (eg. WSUSSRV1)"
 		if ([string]::IsNullOrWhiteSpace($Config.WSUSServer)) { $Config.WSUSServer = "" }
 	}
@@ -256,92 +321,135 @@ function Invoke-Safe {
         [string]$Action
     )
 
+	# Reset error state per action
+    $Config.Error = 0
+
     try {
         & $Code
     }
     catch {
-        Write-Log "$Action failed: $_" "ERROR"
+		$Config.Error = 1
+		Write-Log "$Action failed" "ERROR"
+		throw
     }
+	finally{
+		if($Config.Error -eq 0){	
+			Write-Log "$Action succeed" "OK"
+		}
+	}
 }
 
 # =====================================================================
 # WDS FUNCTIONS
 # =====================================================================
+function Confirm-InstallFiles {
+	Write-Log "Checking if we need to download required installation files."
+	
+	# Checking ADK
+	Write-Log "Checking Windows ADK."
+	If (-not (Test-Path $($Config.ADKSetup))) { 
+		Write-Log "ADK Setup not found. We need to download it." "WARN"
+		
+		# Start Download
+		Invoke-Safe {
+			Start-DownloadInstallerFile -Url $($Config.AdkURL) -DestinationPath $($Config.ADKSetup)
+		} "Download file"
+		
+	}
+	else{
+		Write-Log "Setup file found. Nothing to download."
+	}
+
+	# Checking ADK WinPE
+	Write-Log "Checking Windows PE ADK."
+	If (-not (Test-Path $($Config.WinPESetup))) { 
+		Write-Log "WinPE ADK Setup not found. We need to download it." "WARN"
+		
+		# Start Download
+		Invoke-Safe {
+			Start-DownloadInstallerFile -Url $($Config.AdkPeURL) -DestinationPath $($Config.WinPESetup)
+		} "Download file"
+		
+	}
+	else{
+		Write-Log "Setup file found. Nothing to download."
+	}
+
+	# Checking MDT Setup
+	Write-Log "Checking MDT."
+	If (-not (Test-Path $($Config.MDTSetup))) { 
+		Write-Log "MDT Setup not found. We need to download it." "WARN"
+		
+		# Start Download
+		Invoke-Safe {
+			Start-DownloadInstallerFile -Url $($Config.MdtURL) -DestinationPath $($Config.MDTSetup)
+		} "Download file"
+		
+	}
+	else{
+		Write-Log "Setup file found. Nothing to download."
+	}
+
+	# Checking MDT Patch
+	Write-Log "Checking MDT Patch."
+	If (-not (Test-Path $($Config.MDTPatch))) { 
+		Write-Log "MDT Patch not found. We need to download it." "WARN"
+		
+		# Start Download
+		Invoke-Safe {
+			Start-DownloadInstallerFile -Url $($Config.MdtPatchURL) -DestinationPath $($Config.MDTPatch)
+		} "Download file"
+		
+	}
+	else{
+		Write-Log "Setup file found. Nothing to download."
+	}
+
+	# Checking 'ADK x86' files
+	If (-not (Test-Path $($Config.ADKx86Src))) { 
+		Write-Log "ADK x86 files not found in '$($Config.ADKx86Src)'. You need to provide x86 ADK files in order to be able to update the deployment share." "ERROR"
+		break
+	}
+	else{
+		Write-Log "ADK x86 files found."
+	}
+}
 
 function New-WDSUser {
-	$ok = $true
+	
     Write-Log "Creating WDS service user '$($Config.WDSUser)'"
 	$securePW = ConvertTo-SecureString $Config.WDSPassword -AsPlainText -Force
 
-	try{
-		Invoke-Safe {
-			New-LocalUser -Name $Config.WDSUser `
-				-Password $securePW `
-				-AccountNeverExpires `
-				-UserMayNotChangePassword `
-				-FullName "Windows Deployment User" `
-				-Description "Windows Deployment User" | Out-Null
-		} "Create local WDS user"
-	}
-	catch{
-		$ok = $false
-	}
-	finally{
-		if($ok){
-			Write-Log "Creating WDS service user succeed" "OK"
-		}
-		else{
-			Write-Log "Creating WDS service user failed: $_" "ERROR"
-		}
-	}
+	Invoke-Safe {
+		New-LocalUser -Name $Config.WDSUser `
+			-Password $securePW `
+			-AccountNeverExpires `
+			-UserMayNotChangePassword `
+			-FullName "Windows Deployment User" `
+			-Description "Windows Deployment User" | Out-Null
+	} "Create local WDS user"
+	
 }
 
 function Initialize-WDSMode {
-	$ok = $true
-    Write-Log "Initializing WDS Mode."
 	
-	try{
-		Invoke-Safe {
-			wdsutil /Initialize-Server /Server:localhost /$($Config.WDSMode) /reminst:"$($Config.RemInstall)" 1>$null 2>&1
-		} "WDS initialization"
-	}
-	catch{
-		
-		$ok = $false
-	}
-	finally{
-		if($ok){
-			Write-Log "Initializing WDS Mode succeed" "OK"
-		}
-		else{
-			Write-Log "Initializing WDS Mode failed: $_" "ERROR"
-		}
-	}
+    Write-Log "Initializing WDS Mode."
+	Invoke-Safe {
+		wdsutil /Initialize-Server /Server:localhost /$($Config.WDSMode) /reminst:"$($Config.RemInstall)" 1>$null 2>&1
+	} "WDS initialization"
+	
 }
 
 function Start-ConfigureWDS {
-	$ok = $true
+	
 
     Write-Log "Configuring WDS"
-	try{
-		Invoke-Safe { wdsutil /Set-Server /AnswerClients:$($Config.AnswerClients) 1>$null 2>&1 } "Set WDS to answer ALL clients"
-		Invoke-Safe { wdsutil /Set-Server /PxePromptPolicy /Known:$($Config.PxePromptKnown) 1>$null 2>&1 } "PXE known = NoPrompt"
-		Invoke-Safe { wdsutil /Set-Server /PxePromptPolicy /New:$($Config.PxePromptNew) 1>$null 2>&1 } "PXE new = NoPrompt"
-		Invoke-Safe { wdsutil /Set-Server /UseDhcpPorts:$($Config.UseDhcpPorts) 1>$null 2>&1 } "Disable WDS DHCP port listening"
-		#Invoke-Safe { wdsutil /Set-Server /DhcpOption60:$($Config.DhcpOption60) 1>$null 2>&1 } "Disable WDS DHCP Option listening"
-	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Configuring WDS succeed" "OK"
-		}
-		else{
-			Write-Log "Configuring WDS failed: $_" "ERROR"
-		}
-	}
+	Invoke-Safe { wdsutil /Set-Server /AnswerClients:$($Config.AnswerClients) 1>$null 2>&1 } "Set WDS to answer ALL clients"
+	Invoke-Safe { wdsutil /Set-Server /PxePromptPolicy /Known:$($Config.PxePromptKnown) 1>$null 2>&1 } "Set PXE Prompt for Known Clients to NoPrompt"
+	Invoke-Safe { wdsutil /Set-Server /PxePromptPolicy /New:$($Config.PxePromptNew) 1>$null 2>&1 } "Set PXE Prompt for Unknown Clients to NoPrompt"
+	Invoke-Safe { wdsutil /Set-Server /UseDhcpPorts:$($Config.UseDhcpPorts) 1>$null 2>&1 } "Disable WDS DHCP port listening"
+	#Invoke-Safe { wdsutil /Set-Server /DhcpOption60:$($Config.DhcpOption60) 1>$null 2>&1 } "Disable WDS DHCP Option listening"
+	
 }
 
 # =====================================================================
@@ -349,60 +457,33 @@ function Start-ConfigureWDS {
 # =====================================================================
 
 function Install-ADK {
-	$ok = $true
+	
     if (-not (Confirm-Step "Install Windows ADK?")) { return }
 
     Write-Log "Installing Windows 11 ADK"
+	Invoke-Safe {
+		Start-Process -FilePath "$($Config.ADKSetup)" `
+			-ArgumentList "/quiet /norestart /ceip off /installpath $($Config.ADKInstPath) /features OptionId.DeploymentTools OptionId.UserStateMigrationTool" `
+			-Wait -NoNewWindow
+	} "Install W11 ADK"
 	
-	try{
-		Invoke-Safe {
-			Start-Process -FilePath "$($Config.ADKSetup)" `
-				-ArgumentList "/quiet /norestart /ceip off /installpath $($Config.ADKInstPath) /features OptionId.DeploymentTools OptionId.UserStateMigrationTool" `
-				-Wait -NoNewWindow
-		} "Install W11 ADK"
-	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Installing Windows 11 ADK succeed" "OK"
-		}
-		else{
-			Write-Log "Installing Windows 11 ADK failed: $_" "ERROR"
-		}
-	}
 }
 
 function Install-WinPE {
-	$ok = $true
+	
     if (-not (Confirm-Step "Install WinPE?")) { return }
 
     Write-Log "Installing W11 WinPE Addon"
-	try{
-		Invoke-Safe {
-			Start-Process -FilePath "$($Config.WinPESetup)" `
-				-ArgumentList "/quiet /norestart /ceip off /installpath $($Config.ADKInstPath) /features OptionId.WindowsPreinstallationEnvironment" `
-				-Wait -NoNewWindow
-		} "Install W11 WinPE"
-	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Installing W11 WinPE Addon succeed" "OK"
-		}
-		else{
-			Write-Log "Installing W11 WinPE Addon failed: $_" "ERROR"
-		}
-	}
+	Invoke-Safe {
+		Start-Process -FilePath "$($Config.WinPESetup)" `
+			-ArgumentList "/quiet /norestart /ceip off /installpath $($Config.ADKInstPath) /features OptionId.WindowsPreinstallationEnvironment" `
+			-Wait -NoNewWindow
+	} "Install W11 WinPE"
+	
 }
 
 function Import-ADKx86 {
-	$ok = $true
+	
     Write-Log "Copying ADK x86 files"
 	<#
 	try{
@@ -417,23 +498,18 @@ function Import-ADKx86 {
 	}
 	#>
 
-	try{
+	If (-not (Test-Path $($Config.ADKx86Src))) { 
+		Write-Log "ADK x86 files not found in '$($Config.ADKx86Src)'. You need to provide x86 ADK files in order to be able to update the deployment share." "ERROR"
+		break
+	}
+	else{
+		Write-Log "ADK x86 files found"
 		Invoke-Safe {
 			Copy-Item -Path "$($Config.ADKx86Src)" -Destination "$($Config.ADKx86Dst)" -Recurse -Force | Out-Null
 		} "Copy ADK x86 files"
 	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Copy ADK x86 files succeed" "OK"
-		}
-		else{
-			Write-Log "Copy ADK x86 files failed: $_" "ERROR"
-		}
-	}
+
+	
 }
 
 # =====================================================================
@@ -441,98 +517,42 @@ function Import-ADKx86 {
 # =====================================================================
 
 function Install-MDT {
-	$ok = $true
+	
     if (-not (Confirm-Step "Install MDT?")) { return }
 
     Write-Log "Installing MDT"
-	try{
-		Invoke-Safe {
-			Start-Process msiexec.exe -Wait -WorkingDirectory $PSScriptRoot -ArgumentList "/i `"$($Config.MDTSetup)`" /qn /norestart"
-		} "Install MDT"
-	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Installing MDT succeed" "OK"
-		}
-		else{
-			Write-Log "Installing MDT failed: $_" "ERROR"
-		}
-	}
+	Invoke-Safe {
+		Start-Process msiexec.exe -Wait -WorkingDirectory $PSScriptRoot -ArgumentList "/i `"$($Config.MDTSetup)`" /qn /norestart"
+	} "Install MDT"
+	
 }
 
 function Install-MDTPatch {
-	$ok = $true
+	
     Write-Log "Extracting MDT patch"
-
-	try{
-		Invoke-Safe {
-			Start-Process -FilePath "$($Config.MDTPatch)" -ArgumentList "-q", "-extract:`"$($Config.MDTExtractDir)`"" -Wait
-		} "Extract MDT patch"
-	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Extracting MDT patch succeed" "OK"
-		}
-		else{
-			Write-Log "Extracting MDT patch failed: $_" "ERROR"
-		}
-	}
+	Invoke-Safe {
+		Start-Process -FilePath "$($Config.MDTPatch)" -ArgumentList "-q", "-extract:`"$($Config.MDTExtractDir)`"" -Wait
+	} "Extract MDT patch"
+	
 
     Write-Log "Copying Patch Files"
-	$ok = $true
-	try{
-		Invoke-Safe {
-			Copy-Item "$($Config.MDTExtractDir)\x64\*" "$env:ProgramFiles\Microsoft Deployment Toolkit\Templates\Distribution\Tools\x64" -Force
-			Copy-Item "$($Config.MDTExtractDir)\x86\*" "$env:ProgramFiles\Microsoft Deployment Toolkit\Templates\Distribution\Tools\x86" -Force
-		} "Copy MDT patch files"
-	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Copying Patch Files succeed" "OK"
-		}
-		else{
-			Write-Log "Copying Patch Files failed: $_" "ERROR"
-		}
-	}
+	Invoke-Safe {
+		Copy-Item "$($Config.MDTExtractDir)\x64\*" "$env:ProgramFiles\Microsoft Deployment Toolkit\Templates\Distribution\Tools\x64" -Force
+		Copy-Item "$($Config.MDTExtractDir)\x86\*" "$env:ProgramFiles\Microsoft Deployment Toolkit\Templates\Distribution\Tools\x86" -Force
+	} "Copy MDT patch files"
+	
 }
 
 function New-MDTFolders {
     Write-Log "Creating MDT directories"
 	
-
     foreach ($dir in $Config.MDTDirs) {
-		$ok = $true
-		try{
-			Invoke-Safe {
-				if (-not (Test-Path "$($dir)")) {
-					New-Item -ItemType Directory -Path "$($dir)" -Force | Out-Null
-				}
-			} "Create directory $($dir)"
-		}
-		catch{
-			$ok = $false
-			
-		}
-		finally{
-			if($ok){
-				Write-Log "Create directory $($dir) succeed" "OK"
+		Invoke-Safe {
+			if (-not (Test-Path "$($dir)")) {
+				New-Item -ItemType Directory -Path "$($dir)" -Force | Out-Null
 			}
-			else{
-				Write-Log "Create directory $($dir) failed: $_" "ERROR"
-			}
-		}
+		} "Create directory $($dir)"
+		
     }
 }
 
@@ -540,161 +560,67 @@ function Set-MDTSharePermissions {
     Write-Log "Setting NTFS and Share permissions"
 
     foreach ($dir in $Config.MDTDirs) {
-		$ok = $true
+		
         # Share creation
         $shareName = Split-Path $dir -Leaf
-		try{
-			Invoke-Safe {
-				New-SmbShare -Name "$($shareName)" -Path "$($dir)" -FullAccess Administrators -ChangeAccess Everyone | Out-Null
-			} "Create share $($shareName)"
-		}
-		catch{
-			$ok = $false
-			
-		}
-		finally{
-			if($ok){
-				Write-Log "Create share $($shareName) succeed" "OK"
-			}
-			else{
-				Write-Log "Create share $($shareName) failed: $_" "ERROR"
-			}
-		}
+		Invoke-Safe {
+			New-SmbShare -Name "$($shareName)" -Path "$($dir)" -FullAccess Administrators -ChangeAccess Everyone | Out-Null
+		} "Create share $($shareName)"
+		
 
         # NTFS Permissions
-		$ok = $true
-		try{
-			Invoke-Safe {
-				icacls $dir /grant '"Users":(OI)(CI)(RX)' | Out-Null
-				icacls $dir /grant '"Administrators":(OI)(CI)(F)' | Out-Null
-				icacls $dir /grant '"SYSTEM":(OI)(CI)(F)' | Out-Null
-				icacls $dir /grant `"$($Config.CompName)\$($Config.WDSUser)`"':(OI)(CI)(M)' | Out-Null
-			} "Set NTFS permissions for $($dir)"
-		}
-		catch{
-			$ok = $false
-			
-		}
-		finally{
-			if($ok){
-				Write-Log "Set NTFS permissions for $($dir) succeed" "OK"
-			}
-			else{
-				Write-Log "Set NTFS permissions for $($dir) failed: $_" "ERROR"
-			}
-		}
+		Invoke-Safe {
+			icacls $dir /grant '"Users":(OI)(CI)(RX)' | Out-Null
+			icacls $dir /grant '"Administrators":(OI)(CI)(F)' | Out-Null
+			icacls $dir /grant '"SYSTEM":(OI)(CI)(F)' | Out-Null
+			icacls $dir /grant `"$($Config.CompName)\$($Config.WDSUser)`"':(OI)(CI)(M)' | Out-Null
+		} "Set NTFS permissions for $($dir)"
+		
     }
 }
 
 function New-DeploymentShare {
     Write-Log "Creating MDT Deployment Share"
-	$ok = $true
+	
     # Folder
-	try{
-		Invoke-Safe {
-			if (-not (Test-Path $Config.DeploymentShare)) {
-				New-Item -ItemType Directory -Path "$($Config.DeploymentShare)" -Force | Out-Null
-			}
-		} "Create DeploymentShare folder"
-	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Create DeploymentShare folder succeed" "OK"
+	Invoke-Safe {
+		if (-not (Test-Path $Config.DeploymentShare)) {
+			New-Item -ItemType Directory -Path "$($Config.DeploymentShare)" -Force | Out-Null
 		}
-		else{
-			Write-Log "Create DeploymentShare folder failed: $_" "ERROR"
-		}
-	}
+	} "Create DeploymentShare folder"
+	
 
     # Share
-	$ok = $true
-	try{
-		Invoke-Safe {
-			New-SmbShare -Name "$($Config.DeploymentShareName)" -Path "$($Config.DeploymentShare)" -FullAccess Administrators -ChangeAccess Everyone | Out-Null
-		} "Create MDT share"
-	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Create MDT share succeed" "OK"
-		}
-		else{
-			Write-Log "Create MDT share failed: $_" "ERROR"
-		}
-	}
+	Invoke-Safe {
+		New-SmbShare -Name "$($Config.DeploymentShareName)" -Path "$($Config.DeploymentShare)" -FullAccess Administrators -ChangeAccess Everyone | Out-Null
+	} "Create MDT share"
+	
 
     # MDT PSDrive (will only work if MDT provider is functioning)
 	Import-Module $Config.MDTModule -ErrorAction Stop
-	$ok = $true
-	try{
-		Invoke-Safe {
-			New-PSDrive -Name "$($Config.DSName)" -PSProvider "MDTProvider" -Root "$($Config.DeploymentShare)" -Description "$($Config.DeploymentShareDesc)" -Scope Global | Add-MDTPersistentDrive | Out-Null
-		} "Create MDT PSDrive"
-	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Create MDT PSDrive succeed" "OK"
-		}
-		else{
-			Write-Log "Create MDT PSDrive failed: $_" "ERROR"
-		}
-	}
+
+	Invoke-Safe {
+		New-PSDrive -Name "$($Config.DSName)" -PSProvider "MDTProvider" -Root "$($Config.DeploymentShare)" -Description "$($Config.DeploymentShareDesc)" -Scope Global | Add-MDTPersistentDrive | Out-Null
+	} "Create MDT PSDrive"
+	
 }
 
 function New-LogShare {
     Write-Log "Creating MDT Log Share"
-	$ok = $true
+	
     # Folder
-	try{
-		Invoke-Safe {
-			if (-not (Test-Path $Config.MDTLogShare)) {
-				New-Item -ItemType Directory -Path "$($Config.MDTLogShare)" -Force | Out-Null
-			}
-		} "Create Log Share folder"
-	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Create Log Share folder succeed" "OK"
+	Invoke-Safe {
+		if (-not (Test-Path $Config.MDTLogShare)) {
+			New-Item -ItemType Directory -Path "$($Config.MDTLogShare)" -Force | Out-Null
 		}
-		else{
-			Write-Log "Create Log Share folder failed: $_" "ERROR"
-		}
-	}
-
+	} "Create Log Share folder"
+	
     # Share
-	$ok = $true
-	try{
-		Invoke-Safe {
-			New-SmbShare -Name "$($Config.MDTLogName)" -Path "$($Config.MDTLogShare)" -FullAccess Administrators -ChangeAccess Everyone | Out-Null
-		} "Create MDT Log share"
-	}
-	catch{
-		$ok = $false
-		
-	}
-	finally{
-		if($ok){
-			Write-Log "Create MDT Log share succeed" "OK"
-		}
-		else{
-			Write-Log "Create MDT Log share failed: $_" "ERROR"
-		}
-	}
+	Invoke-Safe {
+		New-SmbShare -Name "$($Config.MDTLogName)" -Path "$($Config.MDTLogShare)" -FullAccess Administrators -ChangeAccess Everyone | Out-Null
+	} "Create MDT Log share"
+
+	
 
 }
 
@@ -702,14 +628,14 @@ function New-LogShare {
 function Set-MDTMonitoring {
 	Write-Log "Configure Event Monitoring Service"
 	# Enable Event Monitoring
-	$ok = $true
+	
 	try{
 		Invoke-Safe {
 			Set-MDTMonitorData -Server "$($Config.MDTMonitor)" -EventPort $($Config.MDTMonitorEvent) -DataPort $($Config.MDTMonitorData) | Out-Null
 		} "Set event monitoring configuration"
 	} 
 	catch{
-		$ok = $false
+		
 	}
 	finally{
 		if($ok){
@@ -724,23 +650,11 @@ function Set-MDTMonitoring {
 function Enable-MDTMonitoring {
 	Write-Log "Enable Event Monitoring Service"
 	# Enable Event Monitoring
-	$ok = $true
-	try{
-		Invoke-Safe {
-			Enable-MDTMonitorService -EventPort $($Config.MDTMonitorEvent) -DataPort $($Config.MDTMonitorData) | Out-Null
-		} "Enable Event Monitoring Service"
-	} 
-	catch{
-		$ok = $false
-	}
-	finally{
-		if($ok){
-			Write-Log "Enable Event Monitoring Service succeed" "OK"
-		}
-		else{
-			Write-Log "Enable Event Monitoring Service failed: $_" "ERROR"
-		}
-	}
+
+	Invoke-Safe {
+		Enable-MDTMonitorService -EventPort $($Config.MDTMonitorEvent) -DataPort $($Config.MDTMonitorData) | Out-Null
+	} "Enable Event Monitoring Service"
+	
 }
 
 function Set-CustomSettingsIni {
@@ -748,116 +662,108 @@ function Set-CustomSettingsIni {
     ## Build share CustomSettings.ini
 
 	Write-Log "Build MDT Deployment Share 'CustomSettings.ini'"
-	$ok = $true
 
-	try{
-		Write-Log "Backing up original 'CustomSettings.ini'"
-		Invoke-Safe {
-        	Rename-Item -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -NewName "CustomSettings_Orig.ini"
-		} "Backup 'CustomSettings.ini' file"
+	Write-Log "Backing up original 'CustomSettings.ini'"
+	Invoke-Safe {
+		Rename-Item -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -NewName "CustomSettings_Orig.ini"
+	} "Backup 'CustomSettings.ini' file"
 
-		Write-Log "Creating new 'CustomSettings.ini'"
-		Invoke-Safe {
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "[Settings]"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "Priority=Model,Make,Default"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "Properties=Make,SerialNumber,MyCustomProperty"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "[Default]"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "OSInstall=Y"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipCapture=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipProductKey=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipComputerBackup=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipBitLocker=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipPackageDisplay=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipComputerName=NO"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value 'OSDComputerName=#left("%Make%",2)#-#right("%SerialNumber%",6)#'
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipDomainMembership=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "JoinWorkgroup=WORKGROUP"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipUserData=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "UserDataLocation=NONE"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "ComputerBackupLocation=NONE"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipDeploymentType=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "DeploymentType=NEWCOMPUTER"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipRoles=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "HIDESHELL=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Locale and Time"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipLocaleSelection=NO"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "UserLocale=de-DE"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "UILanguage=en-US"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "KeyboardLocale=de-DE"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "KeyboardLocalePE=0407:00000407"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipTimeZone=NO"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "TimeZoneName=W. Europe Standard Time"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Administrator Password"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipAdminPassword=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "AdminPassword=Wa144i12!"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipAdminAccounts=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Ready to begin"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipSummary=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipFinalSummary=NO"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Personalization"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "_SMSTSOrgName=$($Config.SMSTSPackageName)"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "_SMSTSPackageName=$($Config.SMSTSPackageName)"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Monitoring"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "EventService=http://$($Config.MDTMonitor):$($Config.MDTMonitorEvent)"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";WSUS"
+	Write-Log "Creating new 'CustomSettings.ini'"
+	Invoke-Safe {
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "[Settings]"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "Priority=Model,Make,Default"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "Properties=Make,SerialNumber,MyCustomProperty"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "[Default]"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "OSInstall=Y"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipCapture=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipProductKey=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipComputerBackup=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipBitLocker=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipPackageDisplay=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipComputerName=NO"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value 'OSDComputerName=#left("%Make%",2)#-#right("%SerialNumber%",6)#'
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipDomainMembership=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "JoinWorkgroup=WORKGROUP"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipUserData=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "UserDataLocation=NONE"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "ComputerBackupLocation=NONE"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipDeploymentType=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "DeploymentType=NEWCOMPUTER"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipRoles=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "HIDESHELL=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Locale and Time"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipLocaleSelection=NO"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "UserLocale=de-DE"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "UILanguage=en-US"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "KeyboardLocale=de-DE"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "KeyboardLocalePE=0407:00000407"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipTimeZone=NO"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "TimeZoneName=W. Europe Standard Time"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Administrator Password"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipAdminPassword=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "AdminPassword=Wa144i12!"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipAdminAccounts=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Ready to begin"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipSummary=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SkipFinalSummary=NO"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Personalization"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "_SMSTSOrgName=$($Config.SMSTSPackageName)"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "_SMSTSPackageName=$($Config.SMSTSPackageName)"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Monitoring"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "EventService=http://$($Config.MDTMonitor):$($Config.MDTMonitorEvent)"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";WSUS"
+		if($Config.UseWSUS -eq "Yes") {
 			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "WSUSServer=http://$($Config.WSUSServer):8530"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Logging"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SLShare=\\\\$($Config.CompName)\$($Config.MDTLogName)\\#day(date) & '-' & month(date) & '-' & year(date) & '_' & hour(now) & '-' & minute(now)#" #'SLShare=\\`"'$($Config.CompName)`"'\Logs$\#day(date) & "-" & month(date) & "-" & year(date) & "_" & hour(now) & "-" & minute(now)#'
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Selection Profiles"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- VIRTUELL ---------------------------------------------------------"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Microsoft HyperV - VM"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "[Virtual Machine]"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";WizardSelectionProfile="
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Applications001="
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";VMware 7 - VM"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "[VMware7,1]"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";WizardSelectionProfile="
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Applications001="
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";VMware 8 - VM"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "[VMware20,1]"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";WizardSelectionProfile="
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Applications001="
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- SERVER ---------------------------------------------------------"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- HP ---------------------------------------------------------"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- Dell ---------------------------------------------------------"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- Lenovo ---------------------------------------------------------"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- CLIENT ---------------------------------------------------------"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- HP ---------------------------------------------------------"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- Dell ---------------------------------------------------------"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- Lenovo ---------------------------------------------------------"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
-		} "Generating 'CustomSettings.ini' file"
-	}
-	catch{
-		$ok = $false
-	}
-	finally{
-		if($ok){
-			Write-Log "Build MDT Deployment Share 'CustomSettings.ini' succeed" "OK"
 		}
-		else{
-			Write-Log "Build MDT Deployment Share 'CustomSettings.ini' failed: $_" "ERROR"
+		else {
+			Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";WSUSServer=http://:8530"
 		}
-	}
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Logging"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "SLShare=\\\\$($Config.CompName)\$($Config.MDTLogName)\\#day(date) & '-' & month(date) & '-' & year(date) & '_' & hour(now) & '-' & minute(now)#" #'SLShare=\\`"'$($Config.CompName)`"'\Logs$\#day(date) & "-" & month(date) & "-" & year(date) & "_" & hour(now) & "-" & minute(now)#'
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Selection Profiles"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- VIRTUELL ---------------------------------------------------------"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Microsoft HyperV - VM"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "[Virtual Machine]"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";WizardSelectionProfile="
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Applications001="
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";VMware 7 - VM"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "[VMware7,1]"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";WizardSelectionProfile="
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Applications001="
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";VMware 8 - VM"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value "[VMware20,1]"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";WizardSelectionProfile="
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";Applications001="
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- SERVER ---------------------------------------------------------"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- HP ---------------------------------------------------------"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- Dell ---------------------------------------------------------"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- Lenovo ---------------------------------------------------------"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- CLIENT ---------------------------------------------------------"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- HP ---------------------------------------------------------"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- Dell ---------------------------------------------------------"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ";--------------------------------------------------------- Lenovo ---------------------------------------------------------"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\CustomSettings.ini" -Value ""
+	} "Generating 'CustomSettings.ini' file"
+	
 }
 
 function Set-BootstrapIni {
@@ -865,84 +771,45 @@ function Set-BootstrapIni {
     ## Build share Bootstrap.ini
 
 	Write-Log "Build MDT Deployment Share 'Bootstrap.ini'"
-	$ok = $true
 
-	try{
-		Write-Log "Backing up original 'Bootstrap.ini'"
-		Invoke-Safe {
-        	Rename-Item -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -NewName "Bootstrap_Orig.ini"
-		} "Backup 'Bootstrap.ini' file"
+	Write-Log "Backing up original 'Bootstrap.ini'"
+	Invoke-Safe {
+		Rename-Item -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -NewName "Bootstrap_Orig.ini"
+	} "Backup 'Bootstrap.ini' file"
 
-		Write-Log "Creating new 'Bootstrap.ini'"
-		Invoke-Safe {
-			Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "[Settings]"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "Priority=Default"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value ""
-			Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "[Default]"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "DeployRoot=\\$($Config.CompName)\$($Config.DeploymentShareName)"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "SkipBDDWelcome=YES"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "KeyboardLocale=de-DE"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "KeyboardLocalePE=0407:00000407"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "UserDomain=$($Config.CompName)"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "UserID=$($Config.WDSUser)"
-			Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "UserPassword=$($Config.WDSPassword)"
-		} "Generating 'Bootstrap.ini' file"
-	}
-	catch{
-		$ok = $false
-	}
-	finally{
-		if($ok){
-			Write-Log "Build MDT Deployment Share 'Bootstrap.ini' succeed" "OK"
-		}
-		else{
-			Write-Log "Build MDT Deployment Share 'Bootstrap.ini' failed: $_" "ERROR"
-		}
-	}
+	Write-Log "Creating new 'Bootstrap.ini'"
+	Invoke-Safe {
+		Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "[Settings]"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "Priority=Default"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value ""
+		Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "[Default]"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "DeployRoot=\\$($Config.CompName)\$($Config.DeploymentShareName)"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "SkipBDDWelcome=YES"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "KeyboardLocale=de-DE"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "KeyboardLocalePE=0407:00000407"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "UserDomain=$($Config.CompName)"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "UserID=$($Config.WDSUser)"
+		Add-Content -Path "$($Config.DeploymentShare)\Control\Bootstrap.ini" -Value "UserPassword=$($Config.WDSPassword)"
+	} "Generating 'Bootstrap.ini' file"
+	
 }
 
 function Update-DeploymentShare {
 	Write-Log "Updating Deployment Share and generating boot media"
-	$ok = $true
-
-	try{
-		Invoke-Safe {
-			Update-MDTDeploymentShare -Path "$($Config.DSName):" -Force | Out-Null
-		} "Update DeploymentShare"
-	}
-	catch{
-		$ok = $false
-	}
-	finally{
-		if($ok){
-			Write-Log "Update DeploymentShare succeed" "OK"
-		}
-		else{
-			Write-Log "Update DeploymentShare failed: $_" "ERROR"
-		}
-	}
+	
+	Invoke-Safe {
+		Update-MDTDeploymentShare -Path "$($Config.DSName):" -Force | Out-Null
+	} "Update DeploymentShare"
+	
 }
 
 function Update-WDSBootImage {
 	Write-Log "Updating WDS Boot Image"
-	$ok = $true
-
-	try{
-		Invoke-Safe {
-			Import-WdsBootImage -Path "$($Config.BootImagePath)\$($Config.ImageFile)" -NewImageName "$($Config.ImageName)" -NewFileName "$($Config.ImageFile)" -NewDescription "$($Config.ImageDesc)" -SkipVerify | Out-Null
-		} "Update DeploymentShare"
-	}
-	catch{
-		$ok = $false
-	}
-	finally{
-		if($ok){
-			Write-Log "Update DeploymentShare succeed" "OK"
-		}
-		else{
-			Write-Log "Update DeploymentShare failed: $_" "ERROR"
-		}
-	}
+	
+	Invoke-Safe {
+		Import-WdsBootImage -Path "$($Config.BootImagePath)\$($Config.ImageFile)" -NewImageName "$($Config.ImageName)" -NewFileName "$($Config.ImageFile)" -NewDescription "$($Config.ImageDesc)" -SkipVerify | Out-Null
+	} "Update DeploymentShare"
+	
 }
 
 # =====================================================================
@@ -969,6 +836,7 @@ Write-Host "--------------------------------------------------------------------
 Write-Host "
     + Version                  $($Config.Version)
     + Hostname                 $($Config.CompName)
+    + Source Structure         $($Config.SrcDirs)
 
     WDS Configuration:
     + User                     $($Config.WDSUser)
@@ -1017,36 +885,63 @@ Write-Host "
     + Event Port               $($Config.MDTMonitorEvent)
     + Data Port                $($Config.MDTMonitorData)
 "
-Write-Log "===== BEGIN WDS & MDT CONFIGURATION ====="
+try {
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Initializing:" -PercentComplete 1
+	Confirm-RootDir
+	Write-Log "===== BEGIN WDS & MDT CONFIGURATION ====="
 
-if ($Interactive) {
-    Initialize-InteractiveConfig
+	if ($Interactive) {
+		Initialize-InteractiveConfig
+	}
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Initializing:" -PercentComplete 5
+	Confirm-InstallFiles
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Configure WDS:" -PercentComplete 10
+	New-WDSUser
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Configure WDS:" -PercentComplete 15
+	Initialize-WDSMode
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Configure WDS:" -PercentComplete 20
+	Start-ConfigureWDS
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Configure WDS:" -PercentComplete 25
+
+	Install-ADK
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Installing Files:" -PercentComplete 30
+	Install-WinPE
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Installing Files:" -PercentComplete 35
+	Import-ADKx86
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Installing Files:" -PercentComplete 40
+
+	Install-MDT
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Installing Files:" -PercentComplete 45
+	Install-MDTPatch
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Installing Files:" -PercentComplete 50
+
+	New-MDTFolders
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Configure MDT:" -PercentComplete 55
+	Set-MDTSharePermissions
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Configure MDT:" -PercentComplete 60
+	New-DeploymentShare
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Configure MDT:" -PercentComplete 65
+	New-LogShare
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Configure MDT:" -PercentComplete 70
+
+	#Set-MDTMonitoring
+	Enable-MDTMonitoring
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Configure MDT:" -PercentComplete 75
+
+	Set-CustomSettingsIni
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Configure MDT:" -PercentComplete 80
+	Set-BootstrapIni
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Configure MDT:" -PercentComplete 85
+
+	Update-DeploymentShare
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Finalizing:" -PercentComplete 90
+	Update-WDSBootImage
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Finalizing:" -PercentComplete 95
+
+	Write-Log "===== CONFIGURATION COMPLETED ====="
+	Write-Progress -id 1 -Activity "Configure WDS and MDT" -Status "Finalizing:" -PercentComplete 100
+} 
+catch {
+    Write-Log "FATAL ERROR: $_" "ERROR"
+    exit 1
 }
-
-New-WDSUser
-Initialize-WDSMode
-Start-ConfigureWDS
-
-Install-ADK
-Install-WinPE
-Import-ADKx86
-
-Install-MDT
-Install-MDTPatch
-
-New-MDTFolders
-Set-MDTSharePermissions
-New-DeploymentShare
-New-LogShare
-
-#Set-MDTMonitoring
-Enable-MDTMonitoring
-
-Set-CustomSettingsIni
-Set-BootstrapIni
-
-Update-DeploymentShare
-Update-WDSBootImage
-
-Write-Log "===== CONFIGURATION COMPLETED ====="
-
