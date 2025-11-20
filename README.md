@@ -87,6 +87,7 @@ and more:
 ## 📁 Requirements
 
 -   **Windows Server 2022 / 2025**
+-   **PowerShell 5.1** (Powershell 6 and above is NOT supported)
 -   **Windows ADK for Windows 11 (Dec 2024 release)**
 -   **WinPE Add-on**
 -   **MDT 8456**
