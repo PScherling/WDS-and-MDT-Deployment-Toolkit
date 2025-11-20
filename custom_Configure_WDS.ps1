@@ -78,6 +78,7 @@
           
 
           TODO:
+		  - If ADK x86 sourc folder is present, check if we need to unzip something
 		  - Copy OEM Background to MDT installdir
 
 .PARAMETER Interactive
