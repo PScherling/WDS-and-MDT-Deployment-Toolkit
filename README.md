@@ -1,4 +1,4 @@
-# Automated WDS + MDT Deployment Script
+# WDS-and-MDT-Deployment-Toolkit
 
 This repository contains a fully automated PowerShell script that
 installs, configures, and prepares a complete **Windows Deployment
