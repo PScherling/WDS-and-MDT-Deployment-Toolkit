@@ -21,7 +21,7 @@ It supports both **unattended** and **interactive** execution modes.
 ### **Windows ADK + WinPE**
 
 -   Installs Windows ADK (Deployment Tools + USMT; Attention! November 2025 release ADK 26H1 / Nov 2025 build 28000 is NOT USABLE!)
--   Installs WinPE Add-on
+-   Installs WinPE Add-on (Attention! November 2025 release ADK 26H1 / Nov 2025 build 28000 is NOT USABLE!)
 -   Creates required x86 WinPE directory
 
 ### **MDT Installation & Patch Integration**
