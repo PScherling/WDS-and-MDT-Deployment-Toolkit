@@ -140,7 +140,7 @@ $Config = [PSCustomObject]@{
     WinPESetup      = "C:\_it\WDS Files\ADK\adkwinpesetup.exe"
 	ADKInstPath     = "D:\WindowsKits\ADK"
 
-    ADKx86Dst       = "D:\WindowsKits\ADK\Assessment and Deployment Kit\Windows Preinstallation Environment\x86"
+    ADKx86Dst       = "D:\WindowsKits\ADK\Assessment and Deployment Kit\Windows Preinstallation Environment\x86\WinPE_OCs"
 
     MDTSetup        = "C:\_it\WDS Files\MDT\MicrosoftDeploymentToolkit_x64.msi"
     MDTPatch        = "C:\_it\WDS Files\MDT\MDT_KB4564442.exe"
@@ -922,6 +922,7 @@ catch {
     Write-Log "FATAL ERROR: $_" "ERROR"
     exit 1
 }
+
 
 
 
