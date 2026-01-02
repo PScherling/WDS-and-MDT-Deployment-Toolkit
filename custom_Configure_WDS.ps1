@@ -72,9 +72,9 @@
           Created: 2025-11-17
           Modified: 2026-01-02
 
-          Version - 0.0.1 - () - Finalized functional version 1.
-		  Version - 0.0.2 - () - Check if install files need to be downloaded
-		  Version - 0.0.3 - () - Adding Progress Information
+          Version - 0.0.1 - (2025-11-17) - Finalized functional version 1.
+		  Version - 0.0.2 - (2025-11-17) - Check if install files need to be downloaded
+		  Version - 0.0.3 - (2025-11-26) - Adding Progress Information
 		  Version - 0.0.4 - (2026-01-02) - Forcing Windows ADK release december 2024 because november 2025 release is broken by microsoft
           
 
@@ -922,6 +922,7 @@ catch {
     Write-Log "FATAL ERROR: $_" "ERROR"
     exit 1
 }
+
 
 
 
