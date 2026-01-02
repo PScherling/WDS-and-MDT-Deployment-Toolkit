@@ -21,7 +21,7 @@
     2. **Windows ADK + WinPE Installation**
        - Installs ADK Deployment Tools and USMT
        - Installs WinPE Addon
-       - Copies x86 WinPE platform files
+       - Creates x86 WinPE platform directory
 
     3. **MDT Installation & Patch Integration**
        - Installs MDT via MSI
@@ -922,4 +922,5 @@ catch {
     Write-Log "FATAL ERROR: $_" "ERROR"
     exit 1
 }
+
 
