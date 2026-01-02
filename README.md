@@ -1,9 +1,6 @@
 # WDS and MDT Deployment Toolkit
 
-This repository contains a fully automated PowerShell script that
-installs, configures, and prepares a complete **Windows Deployment
-Services (WDS)** and **Microsoft Deployment Toolkit (MDT)** environment
-on Windows Server.
+This repository contains a fully automated PowerShell script that installs, configures, and prepares a complete **Windows Deployment Services (WDS)** and **Microsoft Deployment Toolkit (MDT)** environment on Windows Server.
 It supports both **unattended** and **interactive** execution modes.
 
 ---
@@ -12,7 +9,8 @@ It supports both **unattended** and **interactive** execution modes.
 
 ### **WDS Configuration**
 
--   Creates a dedicated WDS service account
+-   Creates a dedicated WDS service account 
+> (Ensure that you change the "wds.usr" users password after completion or change it inside the script before you execute it!)
 -   Initializes WDS in standalone mode
 -   Configures PXE prompt behavior
 -   Sets DHCP/WDS port behavior
@@ -20,8 +18,10 @@ It supports both **unattended** and **interactive** execution modes.
 
 ### **Windows ADK + WinPE**
 
--   Installs Windows ADK (Deployment Tools + USMT; Attention! November 2025 release ADK 26H1 / Nov 2025 build 28000 is NOT USABLE!)
--   Installs WinPE Add-on (Attention! November 2025 release ADK 26H1 / Nov 2025 build 28000 is NOT USABLE!)
+-   Installs Windows ADK (Deployment Tools + USMT)
+> Attention! November 2025 release ADK 26H1 / Nov 2025 build 28000 is NOT USABLE
+-   Installs WinPE Add-on
+> Attention! November 2025 release ADK 26H1 / Nov 2025 build 28000 is NOT USABLE!
 -   Creates required x86 WinPE directory
 
 ### **MDT Installation & Patch Integration**
@@ -34,7 +34,7 @@ It supports both **unattended** and **interactive** execution modes.
 
 -   Creates DeploymentShare folder
 -   Creates admin SMB share
--   Creates Reports, BLKeys, and Logs directories
+-   Creates Reports, BitLockerKeys, and Log directories
 -   Assigns NTFS + SMB permissions
 -   Creates a global MDTProvider PSDrive
 -   Enables MDT Monitoring Service
@@ -142,6 +142,7 @@ A detailed installation log is generated automatically:
 -   Script must be run as **Administrator**
 -   Server must be rebooted before running WDS for the first time
 -   Ensure ADK + WinPE + MDT files exist in the paths configured
+-   Ensure that you change the "wds.usr" users password after completion or change it inside the script before you execute it
 
 ---
 
