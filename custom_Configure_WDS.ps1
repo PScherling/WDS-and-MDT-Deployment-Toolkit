@@ -70,11 +70,12 @@
           Contact: @Patrick Scherling
           Primary: @Patrick Scherling
           Created: 2025-11-17
-          Modified: 2025-11-20
+          Modified: 2026-01-02
 
           Version - 0.0.1 - () - Finalized functional version 1.
 		  Version - 0.0.2 - () - Check if install files need to be downloaded
 		  Version - 0.0.3 - () - Adding Progress Information
+		  Version - 0.0.4 - (2026-01-02) - Forcing Windows ADK release december 2024 because november 2025 release is broken by microsoft
           
 
           TODO:
@@ -119,7 +120,7 @@ if ($PSVersionTable.PSVersion.Major -ge 6) {
 
 $Config = [PSCustomObject]@{
     Feature         = "WDS"
-	Version         = "0.0.3"
+	Version         = "0.0.4"
     CompName        = $env:COMPUTERNAME
 
 	WDSUser         = "wds.usr"
@@ -139,7 +140,6 @@ $Config = [PSCustomObject]@{
     WinPESetup      = "C:\_it\WDS Files\ADK\adkwinpesetup.exe"
 	ADKInstPath     = "D:\WindowsKits\ADK"
 
-    ADKx86Src       = "C:\_it\WDS Files\ADK\Windows PE Environment\x86"
     ADKx86Dst       = "D:\WindowsKits\ADK\Assessment and Deployment Kit\Windows Preinstallation Environment\x86"
 
     MDTSetup        = "C:\_it\WDS Files\MDT\MicrosoftDeploymentToolkit_x64.msi"
@@ -405,15 +405,6 @@ function Confirm-InstallFiles {
 	else{
 		Write-Log "Setup file found. Nothing to download."
 	}
-
-	# Checking 'ADK x86' files
-	If (-not (Test-Path $($Config.ADKx86Src))) { 
-		Write-Log "ADK x86 files not found in '$($Config.ADKx86Src)'. You need to provide x86 ADK files in order to be able to update the deployment share." "ERROR"
-		break
-	}
-	else{
-		Write-Log "ADK x86 files found."
-	}
 }
 
 function New-WDSUser {
@@ -484,9 +475,8 @@ function Install-WinPE {
 }
 
 function Import-ADKx86 {
-	
-    Write-Log "Copying ADK x86 files"
-	<#
+
+	Write-Log "Create ADK WinPE x86 directory"
 	try{
 		Invoke-Safe {
 			if (-not (Test-Path "$($Config.ADKx86Dst)")) {
@@ -495,21 +485,8 @@ function Import-ADKx86 {
 		} "Create ADK x86 destination directory"
 	}
 	catch{
-		Write-Log "Create ADK x86 destination directory failed: $_" "ERROR"
+		Write-Log "Create ADK WinPE x86 directory failed: $_" "ERROR"
 	}
-	#>
-
-	If (-not (Test-Path $($Config.ADKx86Src))) { 
-		Write-Log "ADK x86 files not found in '$($Config.ADKx86Src)'. You need to provide x86 ADK files in order to be able to update the deployment share." "ERROR"
-		break
-	}
-	else{
-		Write-Log "ADK x86 files found"
-		Invoke-Safe {
-			Copy-Item -Path "$($Config.ADKx86Src)" -Destination "$($Config.ADKx86Dst)" -Recurse -Force | Out-Null
-		} "Copy ADK x86 files"
-	}
-
 	
 }
 
@@ -852,7 +829,6 @@ Write-Host "
     + Source Root Path         $($Config.SourceRoot)
     + ADK Setup File           $($Config.ADKSetup)
     + WinPE Setup File         $($Config.WinPESetup)
-    + ADK x86 Src              $($Config.ADKx86Src)
     
     + ADK Install Path         $($Config.ADKInstPath)
     + ADK x86 Dst              $($Config.ADKx86Dst)
@@ -946,3 +922,4 @@ catch {
     Write-Log "FATAL ERROR: $_" "ERROR"
     exit 1
 }
+
