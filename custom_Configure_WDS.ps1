@@ -12,7 +12,7 @@
     It performs the following:
 
     1. **WDS Configuration**
-       - Creates WDS service user
+       - Creates WDS service user (Ensure that you change the "wds.usr" users password after completion or change it inside the script before you execute it!)
        - Initializes WDS in Standalone mode
        - Configures PXE behavior
        - Configures DHCP behavior
@@ -922,6 +922,7 @@ catch {
     Write-Log "FATAL ERROR: $_" "ERROR"
     exit 1
 }
+
 
 
 
