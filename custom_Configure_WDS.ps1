@@ -452,12 +452,12 @@ function Install-ADK {
 	
     if (-not (Confirm-Step "Install Windows ADK?")) { return }
 
-    Write-Log "Installing Windows 11 ADK"
+    Write-Log "Installing Windows ADK"
 	Invoke-Safe {
 		Start-Process -FilePath "$($Config.ADKSetup)" `
 			-ArgumentList "/quiet /norestart /ceip off /installpath $($Config.ADKInstPath) /features OptionId.DeploymentTools OptionId.UserStateMigrationTool" `
 			-Wait -NoNewWindow
-	} "Install W11 ADK"
+	} "Install ADK"
 	
 }
 
@@ -465,12 +465,12 @@ function Install-WinPE {
 	
     if (-not (Confirm-Step "Install WinPE?")) { return }
 
-    Write-Log "Installing W11 WinPE Addon"
+    Write-Log "Installing WinPE Addon"
 	Invoke-Safe {
 		Start-Process -FilePath "$($Config.WinPESetup)" `
 			-ArgumentList "/quiet /norestart /ceip off /installpath $($Config.ADKInstPath) /features OptionId.WindowsPreinstallationEnvironment" `
 			-Wait -NoNewWindow
-	} "Install W11 WinPE"
+	} "Install WinPE"
 	
 }
 
@@ -922,5 +922,6 @@ catch {
     Write-Log "FATAL ERROR: $_" "ERROR"
     exit 1
 }
+
 
 
