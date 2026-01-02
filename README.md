@@ -10,7 +10,7 @@ It supports both **unattended** and **interactive** execution modes.
 ### **WDS Configuration**
 
 -   Creates a dedicated WDS service account 
-> (Ensure that you change the "wds.usr" users password after completion or change it inside the script before you execute it!)
+> Ensure that you change the "wds.usr" users password after completion or change it inside the script before you execute it!
 -   Initializes WDS in standalone mode
 -   Configures PXE prompt behavior
 -   Sets DHCP/WDS port behavior
