@@ -99,8 +99,6 @@ Folder structure example:
         ├── ADK     
             └── win11_24h2_adksetup_dez24.exe
             └── win11_24h2_adkwinpesetup_dez24.exe
-            ├── Windows PE Environment
-                ├── x86 ...
         ├── MDT   
             └── MicrosoftDeploymentToolkit_x64.msi
             └── MicrosoftDeploymentToolkit_x86.msi
