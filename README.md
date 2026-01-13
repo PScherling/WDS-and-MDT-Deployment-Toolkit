@@ -1,3 +1,8 @@
+![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue)
+![Platform](https://img.shields.io/badge/Platform-Windows-blue)
+![Servicing](https://img.shields.io/badge/Servicing-Offline-important)
+![Audience](https://img.shields.io/badge/Audience-Enterprise-informational)
+
 # WDS and MDT Deployment Toolkit
 
 This repository contains a fully automated PowerShell script that installs, configures, and prepares a complete **Windows Deployment Services (WDS)** and **Microsoft Deployment Toolkit (MDT)** environment on Windows Server.
