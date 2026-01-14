@@ -2,6 +2,7 @@
 ![Platform](https://img.shields.io/badge/Platform-Windows-blue)
 ![Servicing](https://img.shields.io/badge/Servicing-Offline-important)
 ![Audience](https://img.shields.io/badge/Audience-Enterprise-informational)
+![Maintenance](https://img.shields.io/badge/Maintained-Yes-success)
 
 # WDS and MDT Deployment Toolkit
 
